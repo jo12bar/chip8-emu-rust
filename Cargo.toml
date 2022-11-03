@@ -3,7 +3,40 @@ name = "rust-chip"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "A highly experimental Rust-based CHIP8 emulator, with web and desktop support and hardware-accelerated rendering."
+license = "MIT"
+repository = "https://github.com/jo12bar/rust-chip"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+cfg-if = "1.0.0"
+color-eyre = "0.6.2"
 strum = { version = "0.24.1", features = ["derive"] }
+tokio = { version = "1.21.2", features = ["rt", "macros", "time"] }
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3.16", features = ["env-filter", "time"] }
+wgpu = "0.14.0"
+winit = "0.27.5"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+console_error_panic_hook = '0.1.7'
+tracing-web = '0.1.2'
+wasm-bindgen = "0.2.83"
+wasm-bindgen-futures = "0.4.33"
+web-sys = { version = "0.3.60", features = ["Document", "Window", "Element"] }
+wgpu = { version = "0.14.0", features = ["webgl"] }
+time = { version = "*", features = ["wasm-bindgen"] }
+
+# Enable *some* optimizations in debug mode
+[profile.dev]
+opt-level = 1
+
+# Enable full optimizations for dependencies, but not for our code, in debug mode
+[profile.dev.package."*"]
+opt-level = 3
+
+# Enable link-time optimizations for release builds
+[profile.release]
+lto = "thin"

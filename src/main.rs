@@ -1,7 +1,4 @@
-mod ram;
-mod sys_font;
-
-fn main() {
-    let r = ram::Ram::new();
-    println!("{r:x?}");
+#[tokio::main(flavor = "current_thread")]
+async fn main() {
+    rust_chip::run().await;
 }
