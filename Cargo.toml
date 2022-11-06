@@ -11,6 +11,7 @@ repository = "https://github.com/jo12bar/rust-chip"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+bytemuck = { version = "1.12.3", features = ["derive"] }
 cfg-if = "1.0.0"
 color-eyre = "0.6.2"
 strum = { version = "0.24.1", features = ["derive"] }

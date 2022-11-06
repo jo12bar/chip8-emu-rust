@@ -1,7 +1,8 @@
 use color_eyre::Result;
 use winit::{
+    dpi::PhysicalSize,
     event_loop::{ControlFlow, EventLoop},
-    window::WindowBuilder,
+    window::{Fullscreen, WindowBuilder},
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -18,20 +19,27 @@ pub async fn run() {
     setup_logging().unwrap();
 
     let event_loop = EventLoop::new();
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
+    let monitor = event_loop.primary_monitor().unwrap();
+    let monitor_size = monitor.size();
+    let window = WindowBuilder::new()
+        .with_visible(false)
+        .with_title("Rust Chip")
+        .build(&event_loop)
+        .unwrap();
+
+    // WASM builds don't have access to monitor information, so we specify
+    // a fallback resolution instead.
+    //
+    // TODO: change this to use ResizeObserver to auto-resize whenever the
+    // browser window resizes once https://github.com/rust-windowing/winit/pull/2074
+    // is merged!
+    if window.fullscreen().is_none() {
+        window.set_inner_size(PhysicalSize::new(620, 320));
+    }
 
     // If running on the web, make a <canvas> to render to
     #[cfg(target_arch = "wasm32")]
     {
-        // winit prevents sizing with CSS, so we have to set the size manually
-        // when on the web.
-        //
-        // TODO: change this to use ResizeObserver to auto-resize whenever the
-        // browser window resizes once https://github.com/rust-windowing/winit/pull/2074
-        // is merged!
-        use winit::dpi::PhysicalSize;
-        window.set_inner_size(PhysicalSize::new(1280, 720));
-
         use winit::platform::web::WindowExtWebSys;
         web_sys::window()
             .and_then(|win| win.document())
@@ -39,6 +47,13 @@ pub async fn run() {
                 let dst = doc.get_element_by_id("rust-chip-canvas")?;
                 let canvas = web_sys::Element::from(window.canvas());
                 dst.append_child(&canvas).ok()?;
+
+                // Request fullscreen. If denied, continue as normal.
+                match canvas.request_fullscreen() {
+                    Ok(_) => {}
+                    Err(_) => (),
+                }
+
                 Some(())
             })
             .expect("Couldn't append <canvas> to document body.");
@@ -46,6 +61,10 @@ pub async fn run() {
 
     let r = ram::Ram::new();
     tracing::info!("{r:x?}");
+
+    window.set_visible(true);
+
+    tracing::info!(size=?monitor_size, "Initializing renderer");
 
     let mut renderer = Renderer::new(&window).await;
 
@@ -71,11 +90,44 @@ pub async fn run() {
                         } => *control_flow = ControlFlow::Exit,
 
                         WindowEvent::Resized(physical_size) => {
+                            tracing::info!(
+                                physical_size=?physical_size,
+                                "Resizing renderer due to window resize event"
+                            );
                             renderer.resize(*physical_size);
                         }
 
-                        WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                        WindowEvent::ScaleFactorChanged {
+                            new_inner_size,
+                            scale_factor,
+                        } => {
+                            tracing::info!(
+                                new_inner_size=?new_inner_size,
+                                scale_factor=scale_factor,
+                                "Resizing renderer due to scale factor change event"
+                            );
                             renderer.resize(**new_inner_size);
+                        }
+
+                        // Handle switching to fullscreen
+                        #[allow(deprecated)]
+                        WindowEvent::KeyboardInput {
+                            input:
+                                KeyboardInput {
+                                    state: ElementState::Pressed,
+                                    virtual_keycode: Some(VirtualKeyCode::Return),
+                                    modifiers: ModifiersState::ALT,
+                                    ..
+                                },
+                            ..
+                        } => {
+                            if window.fullscreen().is_none() {
+                                tracing::info!("Switching to fullscreen borderless");
+                                window.set_fullscreen(Some(Fullscreen::Borderless(None)));
+                            } else {
+                                tracing::info!("Switching to windowed");
+                                window.set_fullscreen(None);
+                            }
                         }
 
                         _ => {}
@@ -89,7 +141,10 @@ pub async fn run() {
                     Ok(_) => {}
 
                     // Reconfigure the surface if lost
-                    Err(wgpu::SurfaceError::Lost) => renderer.resize(renderer.size),
+                    Err(wgpu::SurfaceError::Lost) => {
+                        tracing::info!("Resizing renderer due to losing its surface");
+                        renderer.resize(renderer.size);
+                    }
 
                     // System is out of memory, so we should probably quit
                     Err(wgpu::SurfaceError::OutOfMemory) => {
