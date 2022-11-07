@@ -183,7 +183,7 @@ impl Renderer {
         });
         let num_indices = INDICES.len() as u32;
 
-        let blank_display = Chip8Display::new();
+        let blank_display = BlankDisplay::new();
         let blank_display_texture = WgpuDisplayTexture::from_chip8_display(
             &device,
             &queue,
@@ -274,6 +274,62 @@ impl Renderer {
         }
     }
 
+    /// Attach a new CHIP8-compatible display to the renderer.
+    ///
+    /// This will allocate the GPU textures and bind groups necessary for the
+    /// display. The renderer will then start rendering the display the next
+    /// time [`Renderer::render()`] is called.
+    ///
+    /// Whatever previous display was in use will be released, and its textures
+    /// and bind groups deallocated.
+    pub fn attach_display(
+        &mut self,
+        new_display: Arc<Mutex<dyn Display>>,
+        display_label: Option<&str>,
+        display_bind_group_label: Option<&str>,
+    ) {
+        let display_texture = {
+            let new_display = new_display.lock().unwrap();
+
+            WgpuDisplayTexture::from_chip8_display(
+                &self.device,
+                &self.queue,
+                &*new_display,
+                display_label,
+            )
+        };
+
+        let display_texture_bind_group =
+            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &self.display_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&display_texture.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&display_texture.sampler),
+                    },
+                ],
+                label: display_bind_group_label,
+            });
+
+        self.display = Some(new_display);
+        self.display_texture = Some(display_texture);
+        self.display_texture_bind_group = Some(display_texture_bind_group);
+    }
+
+    /// Detach the current CHIP8-compatible display.
+    ///
+    /// A black 1x1 pixel will be rendered in its place on the next call to
+    /// [`Self::render()`].
+    pub fn detach_display(&mut self) {
+        self.display.take();
+        self.display_texture.take();
+        self.display_texture_bind_group.take();
+    }
+
     /// Handle input. This will probably be moved to some other module at some
     /// point.
     pub fn input(&mut self, _event: &WindowEvent) -> bool {
@@ -320,10 +376,10 @@ impl Renderer {
 
             render_pass.set_pipeline(&self.render_pipeline);
 
-            if self.display_texture.is_none() || self.display_texture_bind_group.is_none() {
-                render_pass.set_bind_group(0, &self.blank_display_texture_bind_group, &[]);
+            if let Some(display_texture_bind_group) = &self.display_texture_bind_group {
+                render_pass.set_bind_group(0, display_texture_bind_group, &[]);
             } else {
-                // TODO: no-op for now
+                render_pass.set_bind_group(0, &self.blank_display_texture_bind_group, &[]);
             }
 
             render_pass.set_bind_group(1, &self.screen_size_bind_group, &[]);

@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use color_eyre::Result;
 use winit::{
     dpi::PhysicalSize,
@@ -14,6 +16,8 @@ mod renderer;
 mod sys_font;
 
 use renderer::Renderer;
+
+use crate::display::Display;
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
 pub async fn run() {
@@ -63,11 +67,22 @@ pub async fn run() {
     let r = ram::Ram::new();
     tracing::info!("{r:x?}");
 
+    let display: Arc<Mutex<dyn Display>> =
+        Arc::new(Mutex::new(display::chip8_display::Chip8Display::new()));
+
     window.set_visible(true);
 
     tracing::info!(size=?monitor_size, "Initializing renderer");
 
     let mut renderer = Renderer::new(&window).await;
+
+    renderer.attach_display(
+        Arc::clone(&display),
+        Some("CHIP8 display"),
+        Some("CHIP8 display bind group"),
+    );
+
+    let mut display_attached = true;
 
     event_loop.run(move |event, _, control_flow| {
         use winit::event::*;
@@ -128,6 +143,29 @@ pub async fn run() {
                             } else {
                                 tracing::info!("Switching to windowed");
                                 window.set_fullscreen(None);
+                            }
+                        }
+
+                        // TEST: detaching and reattaching the display at will
+                        WindowEvent::KeyboardInput {
+                            input:
+                                KeyboardInput {
+                                    state: ElementState::Pressed,
+                                    virtual_keycode: Some(VirtualKeyCode::D),
+                                    ..
+                                },
+                            ..
+                        } => {
+                            if display_attached {
+                                renderer.detach_display();
+                                display_attached = false;
+                            } else {
+                                renderer.attach_display(
+                                    Arc::clone(&display),
+                                    Some("CHIP8 display"),
+                                    Some("CHIP8 display bind group"),
+                                );
+                                display_attached = true;
                             }
                         }
 
