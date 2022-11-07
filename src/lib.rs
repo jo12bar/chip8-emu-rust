@@ -8,6 +8,7 @@ use winit::{
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
+mod display;
 mod ram;
 mod renderer;
 mod sys_font;

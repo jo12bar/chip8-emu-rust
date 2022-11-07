@@ -1,5 +1,11 @@
+use std::sync::{Arc, Mutex};
+
 use wgpu::util::DeviceExt;
 use winit::{event::*, window::Window};
+
+use crate::display::{
+    blank_display::BlankDisplay, chip8_display::Chip8Display, Display, WgpuDisplayTexture,
+};
 
 /// A [`wgpu`] renderer for rendering the emulated screen and the GUI.
 pub struct Renderer {
@@ -7,11 +13,26 @@ pub struct Renderer {
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
+
     pub size: winit::dpi::PhysicalSize<u32>,
+
     render_pipeline: wgpu::RenderPipeline,
+
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     num_indices: u32,
+
+    display_bind_group_layout: wgpu::BindGroupLayout,
+
+    blank_display_texture_bind_group: wgpu::BindGroup,
+
+    display: Option<Arc<Mutex<dyn Display>>>,
+    display_texture: Option<WgpuDisplayTexture>,
+    display_texture_bind_group: Option<wgpu::BindGroup>,
+
+    screen_size_uniform: ScreenSizeUniform,
+    screen_size_buffer: wgpu::Buffer,
+    screen_size_bind_group: wgpu::BindGroup,
 }
 
 impl Renderer {
@@ -67,10 +88,50 @@ impl Renderer {
 
         let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
 
+        let display_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        // This should match the filterable field of the corresponding
+                        // Texture entry above:
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+                label: Some("Display bind group layout"),
+            });
+
+        let screen_size_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: Some("Screen size bind group layout"),
+            });
+
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render pipeline layout"),
-                bind_group_layouts: &[],
+                bind_group_layouts: &[&display_bind_group_layout, &screen_size_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -122,16 +183,73 @@ impl Renderer {
         });
         let num_indices = INDICES.len() as u32;
 
+        let blank_display = Chip8Display::new();
+        let blank_display_texture = WgpuDisplayTexture::from_chip8_display(
+            &device,
+            &queue,
+            &blank_display,
+            Some("Blank display"),
+        );
+
+        let blank_display_texture_bind_group =
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &display_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&blank_display_texture.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&blank_display_texture.sampler),
+                    },
+                ],
+                label: Some("Blank display bind group"),
+            });
+
+        let mut screen_size_uniform = ScreenSizeUniform::new();
+        screen_size_uniform.update_size(size.into());
+
+        let screen_size_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Screen size uniform buffer"),
+            contents: bytemuck::cast_slice(&[screen_size_uniform]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let screen_size_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &screen_size_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: screen_size_buffer.as_entire_binding(),
+            }],
+            label: Some("Screen size bind group"),
+        });
+
         Self {
             surface,
             device,
             queue,
             config,
+
             size,
+
             render_pipeline,
+
             vertex_buffer,
             index_buffer,
             num_indices,
+
+            display_bind_group_layout,
+
+            blank_display_texture_bind_group,
+
+            display: None,
+            display_texture: None,
+            display_texture_bind_group: None,
+
+            screen_size_uniform,
+            screen_size_buffer,
+            screen_size_bind_group,
         }
     }
 
@@ -144,6 +262,15 @@ impl Renderer {
             self.config.width = new_size.width;
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
+
+            // Update the DisplayTexScaleUniform with the new paintable area size.
+            self.screen_size_uniform.update_size(new_size.into());
+
+            self.queue.write_buffer(
+                &self.screen_size_buffer,
+                0,
+                bytemuck::cast_slice(&[self.screen_size_uniform]),
+            );
         }
     }
 
@@ -192,6 +319,15 @@ impl Renderer {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
+
+            if self.display_texture.is_none() || self.display_texture_bind_group.is_none() {
+                render_pass.set_bind_group(0, &self.blank_display_texture_bind_group, &[]);
+            } else {
+                // TODO: no-op for now
+            }
+
+            render_pass.set_bind_group(1, &self.screen_size_bind_group, &[]);
+
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
@@ -208,14 +344,14 @@ impl Renderer {
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct Vertex {
     position: [f32; 3],
-    color: [f32; 3],
+    tex_coords: [f32; 2],
 }
 
 impl Vertex {
     /// WGPU vertex attributes describing how to address the data contained in
     /// this sort of vertex.
     const ATTRIBS: [wgpu::VertexAttribute; 2] =
-        wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3];
+        wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2];
 
     /// Return the vertex buffer layout descriptor for this sort of vertex.
     const fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
@@ -229,16 +365,39 @@ impl Vertex {
 
 #[rustfmt::skip]
 const VERTICES: &[Vertex] = &[
-    Vertex { position: [-0.0868241, 0.49240386, 0.0], color: [0.5, 0.0, 0.5] }, // A
-    Vertex { position: [-0.49513406, 0.06958647, 0.0], color: [0.5, 0.0, 0.5] }, // B
-    Vertex { position: [-0.21918549, -0.44939706, 0.0], color: [0.5, 0.0, 0.5] }, // C
-    Vertex { position: [0.35966998, -0.3473291, 0.0], color: [0.5, 0.0, 0.5] }, // D
-    Vertex { position: [0.44147372, 0.2347359, 0.0], color: [0.5, 0.0, 0.5] }, // E
+    Vertex { position: [-1.0,  1.0, 0.0], tex_coords: [0.0, 0.0], }, // top-left
+    Vertex { position: [ 1.0,  1.0, 0.0], tex_coords: [1.0, 0.0], }, // top-right
+    Vertex { position: [-1.0, -1.0, 0.0], tex_coords: [0.0, 1.0], }, // bottom-left
+    Vertex { position: [ 1.0, -1.0, 0.0], tex_coords: [1.0, 1.0], }, // bottom-right
 ];
 
 #[rustfmt::skip]
 const INDICES: &[u16] = &[
-    0, 1, 4,
-    1, 2, 4,
-    2, 3, 4,
+    0, 2, 1,
+    2, 3, 1,
 ];
+
+/// A uniform for sending the current paintable area size to the GPU, as well
+/// as the size of the [`WgpuDisplayTexture`] being painted.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct ScreenSizeUniform {
+    screen_size: [f32; 2],
+
+    /// This padding is necessary to ensure that this uniform buffer remains
+    /// aligned to 16-byte boundaries, which is required for WebGL.
+    _padding: [f32; 2],
+}
+
+impl ScreenSizeUniform {
+    fn new() -> Self {
+        Self {
+            screen_size: [1.0, 1.0],
+            _padding: [0.0, 0.0],
+        }
+    }
+
+    fn update_size(&mut self, (paint_area_width, paint_area_height): (u32, u32)) {
+        self.screen_size = [paint_area_width as f32, paint_area_height as f32];
+    }
+}
