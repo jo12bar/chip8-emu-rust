@@ -1,3 +1,6 @@
+use std::fmt;
+
+use eframe::wgpu;
 use image::RgbaImage;
 use thiserror::Error;
 
@@ -9,7 +12,7 @@ pub mod chip8_display;
 /// This allows for the implementation of _multiple_ different sorts of CHIP8
 /// displays, from the base, black-and-white 64x32 original display to the
 /// upgraded, multicolour XO-CHIP display.
-pub trait Display {
+pub trait Display: Send + Sync + fmt::Debug {
     /// Return the dimensions of the CHIP8 display as a pair of `(width, height)`.
     fn dimensions(&self) -> (u32, u32);
 
@@ -22,6 +25,7 @@ pub trait Display {
 }
 
 /// The data contained in a CHIP8-compatible display as a wgpu-compatible Texture.
+#[derive(Debug)]
 pub struct WgpuDisplayTexture {
     /// Handle to the wgpu texture on the GPU.
     pub texture: wgpu::Texture,

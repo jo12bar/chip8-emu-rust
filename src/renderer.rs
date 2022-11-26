@@ -1,20 +1,16 @@
 use std::sync::{Arc, Mutex};
 
-use wgpu::util::DeviceExt;
-use winit::{event::*, window::Window};
+use eframe::wgpu;
+use eframe::wgpu::util::DeviceExt;
 
 use crate::display::{
     blank_display::BlankDisplay, chip8_display::Chip8Display, Display, WgpuDisplayTexture,
 };
 
 /// A [`wgpu`] renderer for rendering the emulated screen and the GUI.
+#[derive(Debug)]
 pub struct Renderer {
-    surface: wgpu::Surface,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    config: wgpu::SurfaceConfiguration,
-
-    pub size: winit::dpi::PhysicalSize<u32>,
+    pub size: (u32, u32),
 
     render_pipeline: wgpu::RenderPipeline,
 
@@ -37,54 +33,12 @@ pub struct Renderer {
 
 impl Renderer {
     /// Create a new renderer.
-    pub async fn new(window: &Window) -> Self {
-        let size = window.inner_size();
-
-        let instance = wgpu::Instance::new(wgpu::Backends::all());
-        let surface = unsafe { instance.create_surface(window) };
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                compatible_surface: Some(&surface),
-                force_fallback_adapter: false,
-            })
-            .await
-            .unwrap();
-
-        let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    features: wgpu::Features::empty(),
-                    // webgl doesn't support all of wgpu's features, so if we're building
-                    // for the web then we have to disable some of them.
-                    limits: if cfg!(target_arch = "wasm32") {
-                        wgpu::Limits::downlevel_webgl2_defaults()
-                    } else {
-                        wgpu::Limits::default()
-                    },
-                    label: None,
-                },
-                None, // Trace path
-            )
-            .await
-            .unwrap();
-
-        let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface.get_supported_formats(&adapter)[0],
-            width: size.width,
-            height: size.height,
-            present_mode: if surface
-                .get_supported_present_modes(&adapter)
-                .contains(&wgpu::PresentMode::Mailbox)
-            {
-                wgpu::PresentMode::Mailbox
-            } else {
-                wgpu::PresentMode::Fifo
-            },
-            alpha_mode: wgpu::CompositeAlphaMode::Auto,
-        };
-        surface.configure(&device, &config);
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target_format: wgpu::TextureFormat,
+    ) -> Self {
+        let size = (1, 1);
 
         let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
 
@@ -147,7 +101,7 @@ impl Renderer {
                 module: &shader,
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: config.format,
+                    format: target_format,
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -185,8 +139,8 @@ impl Renderer {
 
         let blank_display = BlankDisplay::new();
         let blank_display_texture = WgpuDisplayTexture::from_chip8_display(
-            &device,
-            &queue,
+            device,
+            queue,
             &blank_display,
             Some("Blank display"),
         );
@@ -208,7 +162,7 @@ impl Renderer {
             });
 
         let mut screen_size_uniform = ScreenSizeUniform::new();
-        screen_size_uniform.update_size(size.into());
+        screen_size_uniform.update_size(size);
 
         let screen_size_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Screen size uniform buffer"),
@@ -226,11 +180,6 @@ impl Renderer {
         });
 
         Self {
-            surface,
-            device,
-            queue,
-            config,
-
             size,
 
             render_pipeline,
@@ -255,18 +204,14 @@ impl Renderer {
 
     /// Resize the renderer. This has the side-effect of re-configuring the
     /// render surface, and re-instantiating the render pipeline.
-    #[tracing::instrument(level = "INFO", skip(self))]
-    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-        if new_size.width > 0 && new_size.height > 0 {
+    pub fn resize(&mut self, new_size: (u32, u32), queue: &wgpu::Queue) {
+        if new_size != self.size && new_size.0 > 0 && new_size.1 > 0 {
             self.size = new_size;
-            self.config.width = new_size.width;
-            self.config.height = new_size.height;
-            self.surface.configure(&self.device, &self.config);
 
             // Update the DisplayTexScaleUniform with the new paintable area size.
             self.screen_size_uniform.update_size(new_size.into());
 
-            self.queue.write_buffer(
+            queue.write_buffer(
                 &self.screen_size_buffer,
                 0,
                 bytemuck::cast_slice(&[self.screen_size_uniform]),
@@ -284,36 +229,32 @@ impl Renderer {
     /// and bind groups deallocated.
     pub fn attach_display(
         &mut self,
-        new_display: Arc<Mutex<dyn Display>>,
+        new_display: Arc<Mutex<dyn Display + Send>>,
         display_label: Option<&str>,
         display_bind_group_label: Option<&str>,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
     ) {
         let display_texture = {
             let new_display = new_display.lock().unwrap();
 
-            WgpuDisplayTexture::from_chip8_display(
-                &self.device,
-                &self.queue,
-                &*new_display,
-                display_label,
-            )
+            WgpuDisplayTexture::from_chip8_display(&*device, &*queue, &*new_display, display_label)
         };
 
-        let display_texture_bind_group =
-            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &self.display_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&display_texture.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&display_texture.sampler),
-                    },
-                ],
-                label: display_bind_group_label,
-            });
+        let display_texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &self.display_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&display_texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&display_texture.sampler),
+                },
+            ],
+            label: display_bind_group_label,
+        });
 
         self.display = Some(new_display);
         self.display_texture = Some(display_texture);
@@ -330,69 +271,26 @@ impl Renderer {
         self.display_texture_bind_group.take();
     }
 
-    /// Handle input. This will probably be moved to some other module at some
-    /// point.
-    pub fn input(&mut self, _event: &WindowEvent) -> bool {
-        false
-    }
-
     /// Update the renderer with new data to render.
     pub fn update(&mut self) {
         // no-op
     }
 
     /// Render a frame.
-    pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        let output = self.surface.get_current_texture()?;
+    pub fn render<'rp>(&'rp self, render_pass: &mut wgpu::RenderPass<'rp>) {
+        render_pass.set_pipeline(&self.render_pipeline);
 
-        let view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-
-        let mut cmd_encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render command encoder"),
-            });
-
-        {
-            let mut render_pass = cmd_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Main render pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.0,
-                            g: 0.0,
-                            b: 0.0,
-                            a: 1.0,
-                        }),
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: None,
-            });
-
-            render_pass.set_pipeline(&self.render_pipeline);
-
-            if let Some(display_texture_bind_group) = &self.display_texture_bind_group {
-                render_pass.set_bind_group(0, display_texture_bind_group, &[]);
-            } else {
-                render_pass.set_bind_group(0, &self.blank_display_texture_bind_group, &[]);
-            }
-
-            render_pass.set_bind_group(1, &self.screen_size_bind_group, &[]);
-
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+        if let Some(display_texture_bind_group) = &self.display_texture_bind_group {
+            render_pass.set_bind_group(0, display_texture_bind_group, &[]);
+        } else {
+            render_pass.set_bind_group(0, &self.blank_display_texture_bind_group, &[]);
         }
 
-        self.queue.submit(std::iter::once(cmd_encoder.finish()));
-        output.present();
+        render_pass.set_bind_group(1, &self.screen_size_bind_group, &[]);
 
-        Ok(())
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
     }
 }
 
