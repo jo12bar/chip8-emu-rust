@@ -2067,7 +2067,6 @@ name = "rust-chip"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
- "cfg-if",
  "color-eyre",
  "eframe",
  "egui",
@@ -2077,7 +2076,6 @@ dependencies = [
  "thiserror",
  "tracing",
  "tracing-subscriber",
- "winit",
 ]
 
 [[package]]
