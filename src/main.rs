@@ -12,7 +12,7 @@ fn main() -> color_eyre::Result<()> {
 
     let mut emulator = rust_chip::emulator::Emulator::new();
     let emulator_app_ref = emulator.clone();
-    let mut emulator_bg_thread_ref = emulator.clone();
+    let emulator_bg_thread_ref = emulator.clone();
 
     let options = eframe::NativeOptions {
         hardware_acceleration: eframe::HardwareAcceleration::Required,
@@ -28,9 +28,7 @@ fn main() -> color_eyre::Result<()> {
             let emu_egui_context = cc.egui_ctx.clone();
 
             // Start the emulator in its background thread
-            std::thread::spawn(move || {
-                emulator_bg_thread_ref.start(emu_egui_context);
-            });
+            emulator_bg_thread_ref.start(emu_egui_context).unwrap();
 
             Box::new(App::new(cc, &emulator_app_ref))
         }),
@@ -61,7 +59,8 @@ pub fn setup_logging() -> color_eyre::Result<()> {
         .with(
             fmt::layer()
                 .event_format(fmt::format().compact())
-                .with_span_events(fmt::format::FmtSpan::ACTIVE),
+                .with_span_events(fmt::format::FmtSpan::ACTIVE)
+                .with_thread_names(true),
         );
 
     reg.try_init()?;

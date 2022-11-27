@@ -9,6 +9,7 @@ use std::sync::{
     Arc, Mutex,
 };
 
+use color_eyre::eyre::Context;
 use crossbeam::channel::{self, Receiver, Sender};
 
 use crate::{
@@ -57,14 +58,32 @@ impl Emulator {
         }
     }
 
-    /// The emulator's main run loop.
-    ///
-    /// You'll probably want to run this in a seperate thread.
+    /// Start the emulator's main run loop in a background thread.
     ///
     /// The [`egui::Context`] is used to wake the UI thread whenever repainting
     /// is required.
-    pub fn start(&mut self, egui_context: egui::Context) {
+    ///
+    /// Returns an error if the emulator is *already* running.
+    pub fn start(self, egui_context: egui::Context) -> color_eyre::Result<()> {
+        if self.should_run.load(Ordering::SeqCst) {
+            return Err(color_eyre::eyre::eyre!("The emulator is already running!"));
+        }
+
+        std::thread::Builder::new()
+            .name("emulator".to_string())
+            .spawn(move || {
+                self.main_run_loop(egui_context);
+            })
+            .wrap_err("Failed to start emulator background thread")?;
+
+        Ok(())
+    }
+
+    /// The emulator's main run loop. This is run in a background thread by [`Self::start()`].
+    fn main_run_loop(self, egui_context: egui::Context) {
         self.should_run.store(true, Ordering::SeqCst);
+
+        tracing::info!("Starting main run loop");
 
         self.attach_display(Box::new(Chip8Display::new()), &egui_context)
             .unwrap();
@@ -91,6 +110,7 @@ impl Emulator {
 
     /// Stop the emulator.
     pub fn stop(&mut self) {
+        tracing::info!("Stopping emulator");
         self.should_run.store(false, Ordering::SeqCst);
     }
 

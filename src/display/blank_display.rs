@@ -18,9 +18,17 @@ pub struct BlankDisplay {
 impl BlankDisplay {
     /// Create a new blank display.
     pub fn new() -> Self {
+        tracing::info!("Initializing dummy blank display");
+
         let buf: RgbaImage = ImageBuffer::new(1, 1);
 
         Self { buf }
+    }
+}
+
+impl Drop for BlankDisplay {
+    fn drop(&mut self) {
+        tracing::info!("Destroying dummy blank display");
     }
 }
 

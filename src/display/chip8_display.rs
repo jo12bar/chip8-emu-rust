@@ -32,6 +32,8 @@ pub struct Chip8Display {
 impl Chip8Display {
     /// Instantiate a new CHIP8 display.
     pub fn new() -> Self {
+        tracing::info!("Initializing CHIP8 display");
+
         let mut buf: RgbaImage = ImageBuffer::from_fn(WIDTH, HEIGHT, |x, y| {
             if (x % 2 == 0 && y % 2 != 0) || (x % 2 != 0 && y % 2 == 0) {
                 image::Rgba([0, 0, 0, 255])
@@ -48,6 +50,12 @@ impl Chip8Display {
         buf[(63, 31)] = image::Rgba([255, 0, 255, 255]); // bottom-right
 
         Self { buf }
+    }
+}
+
+impl Drop for Chip8Display {
+    fn drop(&mut self) {
+        tracing::info!("Destroying CHIP8 display");
     }
 }
 
