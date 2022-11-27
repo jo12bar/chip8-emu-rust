@@ -1,4 +1,5 @@
 use std::fmt;
+use std::sync::{Arc, Mutex};
 
 use eframe::wgpu;
 use image::RgbaImage;
@@ -6,6 +7,10 @@ use thiserror::Error;
 
 pub mod blank_display;
 pub mod chip8_display;
+
+/// A [`Display`] that can be synchronized between threads. The display may or
+/// may not even exist.
+pub type DisplayRef = Arc<Mutex<Option<Box<dyn Display>>>>;
 
 /// A generic CHIP8-compatible display.
 ///
@@ -22,6 +27,13 @@ pub trait Display: Send + Sync + fmt::Debug {
     /// Returns true if the display is in the sRGB colour space, and false if
     /// it's in the regular, linear RGB colour space.
     fn is_srgb(&self) -> bool;
+
+    /// Flip a pixel at some location.
+    ///
+    /// Out-of-bounds accesses will be silently ignored, for the sake of emulator
+    /// stability. Generally, [`Display`] implementations will use some form of
+    /// wrap-around to accomplish this.
+    fn flip_pixel(&mut self, x: u32, y: u32);
 }
 
 /// The data contained in a CHIP8-compatible display as a wgpu-compatible Texture.
@@ -110,7 +122,7 @@ impl WgpuDisplayTexture {
     /// used to create this `WgpuDisplayTexture`, then an error
     /// ([`WgpuDisplayTextureUpdateError::DimensionsChanged`]) will be returned.
     /// In this case, the `WgpuDisplayTexture` must be recreated from scratch.
-    pub fn update<D: Display>(
+    pub fn update<D: Display + ?Sized>(
         &self,
         new_display: &D,
         queue: &wgpu::Queue,

@@ -39,4 +39,9 @@ impl Display for BlankDisplay {
     fn is_srgb(&self) -> bool {
         false
     }
+
+    #[inline]
+    fn flip_pixel(&mut self, _x: u32, _y: u32) {
+        // no-op
+    }
 }

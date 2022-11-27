@@ -4,7 +4,7 @@ use eframe::wgpu;
 use eframe::wgpu::util::DeviceExt;
 
 use crate::display::{
-    blank_display::BlankDisplay, chip8_display::Chip8Display, Display, WgpuDisplayTexture,
+    blank_display::BlankDisplay, DisplayRef, WgpuDisplayTexture, WgpuDisplayTextureUpdateError,
 };
 
 /// A [`wgpu`] renderer for rendering the emulated screen and the GUI.
@@ -22,7 +22,7 @@ pub struct Renderer {
 
     blank_display_texture_bind_group: wgpu::BindGroup,
 
-    display: Option<Arc<Mutex<dyn Display>>>,
+    display: DisplayRef,
     display_texture: Option<WgpuDisplayTexture>,
     display_texture_bind_group: Option<wgpu::BindGroup>,
 
@@ -192,7 +192,7 @@ impl Renderer {
 
             blank_display_texture_bind_group,
 
-            display: None,
+            display: Arc::new(Mutex::new(None)),
             display_texture: None,
             display_texture_bind_group: None,
 
@@ -209,7 +209,7 @@ impl Renderer {
             self.size = new_size;
 
             // Update the DisplayTexScaleUniform with the new paintable area size.
-            self.screen_size_uniform.update_size(new_size.into());
+            self.screen_size_uniform.update_size(new_size);
 
             queue.write_buffer(
                 &self.screen_size_buffer,
@@ -229,7 +229,7 @@ impl Renderer {
     /// and bind groups deallocated.
     pub fn attach_display(
         &mut self,
-        new_display: Arc<Mutex<dyn Display + Send>>,
+        new_display: DisplayRef,
         display_label: Option<&str>,
         display_bind_group_label: Option<&str>,
         device: &wgpu::Device,
@@ -238,7 +238,19 @@ impl Renderer {
         let display_texture = {
             let new_display = new_display.lock().unwrap();
 
-            WgpuDisplayTexture::from_chip8_display(&*device, &*queue, &*new_display, display_label)
+            if new_display.is_none() {
+                self.detach_display();
+                return;
+            }
+
+            let new_display = new_display.as_ref().unwrap();
+
+            WgpuDisplayTexture::from_chip8_display(
+                device,
+                queue,
+                new_display.as_ref(),
+                display_label,
+            )
         };
 
         let display_texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -256,7 +268,7 @@ impl Renderer {
             label: display_bind_group_label,
         });
 
-        self.display = Some(new_display);
+        self.display = new_display;
         self.display_texture = Some(display_texture);
         self.display_texture_bind_group = Some(display_texture_bind_group);
     }
@@ -266,14 +278,40 @@ impl Renderer {
     /// A black 1x1 pixel will be rendered in its place on the next call to
     /// [`Self::render()`].
     pub fn detach_display(&mut self) {
-        self.display.take();
+        self.display = Arc::new(Mutex::new(None));
         self.display_texture.take();
         self.display_texture_bind_group.take();
     }
 
-    /// Update the renderer with new data to render.
-    pub fn update(&mut self) {
-        // no-op
+    /// Upload the display's contents to the GPU for rendering in subsequent calls
+    /// to [`Self::render`].
+    ///
+    /// This is a no-op if no display is currently attached.
+    ///
+    /// Returns [`WgpuDisplayTextureUpdateError::DimensionsChanged`] if the dimensions
+    /// of the currently-attached display do not match the dimensions of the
+    /// GPU-side texture that data is being copied to. In this case, the GPU-side
+    /// texture must be recreated, probably using [`Self::attach_display`].
+    pub fn update_display_texture(
+        &self,
+        queue: &wgpu::Queue,
+    ) -> Result<(), WgpuDisplayTextureUpdateError> {
+        if self.display_texture.is_none() {
+            return Ok(());
+        }
+        let display_texture = self.display_texture.as_ref().unwrap();
+
+        let display = self.display.lock().unwrap();
+        if display.is_none() {
+            return Ok(());
+        }
+
+        let display = display.as_ref().unwrap();
+
+        match display_texture.update(display.as_ref(), queue) {
+            Ok(_) => Ok(()),
+            Err(e @ WgpuDisplayTextureUpdateError::DimensionsChanged { .. }) => Err(e),
+        }
     }
 
     /// Render a frame.

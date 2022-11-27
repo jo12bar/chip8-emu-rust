@@ -1,8 +1,11 @@
 //! The basic CHIP8 display.
 
-use image::{ImageBuffer, RgbaImage};
+use image::{ImageBuffer, Pixel, RgbaImage};
 
 use super::Display;
+
+const WIDTH: u32 = 64;
+const HEIGHT: u32 = 32;
 
 /// The basic CHIP8 display.
 ///
@@ -29,7 +32,7 @@ pub struct Chip8Display {
 impl Chip8Display {
     /// Instantiate a new CHIP8 display.
     pub fn new() -> Self {
-        let mut buf: RgbaImage = ImageBuffer::from_fn(64, 32, |x, y| {
+        let mut buf: RgbaImage = ImageBuffer::from_fn(WIDTH, HEIGHT, |x, y| {
             if (x % 2 == 0 && y % 2 != 0) || (x % 2 != 0 && y % 2 == 0) {
                 image::Rgba([0, 0, 0, 255])
             } else {
@@ -62,5 +65,10 @@ impl Display for Chip8Display {
     #[inline]
     fn is_srgb(&self) -> bool {
         false
+    }
+
+    fn flip_pixel(&mut self, x: u32, y: u32) {
+        let p = self.buf.get_pixel_mut(x % WIDTH, y % HEIGHT);
+        p.invert();
     }
 }

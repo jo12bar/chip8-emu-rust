@@ -16,6 +16,7 @@ strum = { version = "0.24.1", features = ["derive"] }
 thiserror = "1.0.37"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", features = ["env-filter", "time"] }
+crossbeam = { version = "0.8.2", features = ["crossbeam-channel"] }
 
 [dependencies.egui]
 git = "https://github.com/emilk/egui"
