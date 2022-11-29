@@ -1,3 +1,7 @@
+################################################################################
+########################## WORKSPACE CONFIGURATION #############################
+################################################################################
+
 [workspace]
 members = ["crates/*"]
 
@@ -30,6 +34,8 @@ default_features = false
 features = ["persistence", "wgpu", "dark-light", "default_fonts"]
 
 ################################################################################
+######################## ROOT PACKAGE CONFIGURATION ############################
+################################################################################
 
 [package]
 name = "rust-chip"
@@ -41,12 +47,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-#bytemuck.workspace = true
 color-eyre.workspace = true
-#image.workspace = true
 serde.workspace = true
-#strum.workspace = true
-#thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 crossbeam.workspace = true
@@ -57,6 +59,8 @@ emulator.path = "./crates/emulator"
 renderer.path = "./crates/renderer"
 ui-thread-waker.path = "./crates/ui-thread-waker"
 
+################################################################################
+####################### GLOBAL PROFILE CONFIGURATION ###########################
 ################################################################################
 
 # Enable *some* optimizations in debug mode
