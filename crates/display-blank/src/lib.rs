@@ -2,7 +2,7 @@
 
 use image::{ImageBuffer, RgbaImage};
 
-use super::Display;
+use display::Display;
 
 /// This is a fake CHIP8 display that always outputs a single, 1x1 black image.
 ///
@@ -23,6 +23,12 @@ impl BlankDisplay {
         let buf: RgbaImage = ImageBuffer::new(1, 1);
 
         Self { buf }
+    }
+}
+
+impl Default for BlankDisplay {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

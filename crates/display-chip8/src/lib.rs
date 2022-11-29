@@ -1,8 +1,7 @@
 //! The basic CHIP8 display.
 
+use display::Display;
 use image::{ImageBuffer, Pixel, RgbaImage};
-
-use super::Display;
 
 const WIDTH: u32 = 64;
 const HEIGHT: u32 = 32;
@@ -50,6 +49,12 @@ impl Chip8Display {
         buf[(63, 31)] = image::Rgba([255, 0, 255, 255]); // bottom-right
 
         Self { buf }
+    }
+}
+
+impl Default for Chip8Display {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

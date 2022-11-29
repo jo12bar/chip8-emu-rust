@@ -807,6 +807,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd0c93bb4b0c6d9b77f4435b0ae98c24d17f1c45b2ff844c6151a07256ca923b"
 
 [[package]]
+name = "display"
+version = "0.1.0"
+dependencies = [
+ "image",
+]
+
+[[package]]
+name = "display-blank"
+version = "0.1.0"
+dependencies = [
+ "display",
+ "image",
+ "tracing",
+]
+
+[[package]]
+name = "display-chip8"
+version = "0.1.0"
+dependencies = [
+ "display",
+ "image",
+ "tracing",
+]
+
+[[package]]
 name = "dlib"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -914,6 +939,19 @@ source = "git+https://github.com/emilk/egui?rev=502e1aa22952aeae48dadff9fa916a94
 dependencies = [
  "bytemuck",
  "serde",
+]
+
+[[package]]
+name = "emulator"
+version = "0.1.0"
+dependencies = [
+ "color-eyre",
+ "crossbeam",
+ "display",
+ "display-chip8",
+ "ram",
+ "tracing",
+ "ui-thread-waker",
 ]
 
 [[package]]
@@ -2013,6 +2051,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ram"
+version = "0.1.0"
+dependencies = [
+ "sys-font",
+]
+
+[[package]]
 name = "rand"
 version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2128,6 +2173,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1382d1f0a252c4bf97dc20d979a2fdd05b024acd7c2ed0f7595d7817666a157"
 
 [[package]]
+name = "renderer"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "display",
+ "display-blank",
+ "wgpu",
+ "wgpu-display-texture",
+]
+
+[[package]]
 name = "ron"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2142,17 +2198,16 @@ dependencies = [
 name = "rust-chip"
 version = "0.1.0"
 dependencies = [
- "bytemuck",
  "color-eyre",
  "crossbeam",
  "eframe",
  "egui",
- "image",
+ "emulator",
+ "renderer",
  "serde",
- "strum",
- "thiserror",
  "tracing",
  "tracing-subscriber",
+ "ui-thread-waker",
 ]
 
 [[package]]
@@ -2432,6 +2487,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "sys-font"
+version = "0.1.0"
+dependencies = [
+ "strum",
+]
+
+[[package]]
 name = "tempfile"
 version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2664,6 +2726,10 @@ dependencies = [
  "tempfile",
  "winapi",
 ]
+
+[[package]]
+name = "ui-thread-waker"
+version = "0.1.0"
 
 [[package]]
 name = "unicode-bidi"
@@ -2978,6 +3044,15 @@ dependencies = [
  "web-sys",
  "wgpu-hal",
  "wgpu-types",
+]
+
+[[package]]
+name = "wgpu-display-texture"
+version = "0.1.0"
+dependencies = [
+ "display",
+ "thiserror",
+ "wgpu",
 ]
 
 [[package]]

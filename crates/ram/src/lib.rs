@@ -1,6 +1,8 @@
+//! The CHIP8 system's RAM.
+
 use std::ops::{Bound, Index, IndexMut, Range, RangeBounds};
 
-use crate::sys_font::Font;
+use sys_font::Font;
 
 /// The RAM is 4 kiB (4096 bytes) in size.
 pub const RAM_SIZE: u16 = 4096;

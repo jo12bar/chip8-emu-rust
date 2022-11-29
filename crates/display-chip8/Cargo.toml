@@ -1,0 +1,13 @@
+[package]
+name = "display-chip8"
+description = "The basic CHIP8 display."
+
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+display.path = "../display"
+image.workspace = true
+tracing.workspace = true

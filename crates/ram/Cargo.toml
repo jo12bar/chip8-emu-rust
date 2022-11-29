@@ -1,0 +1,11 @@
+[package]
+name = "ram"
+description = "The CHIP8 system's RAM."
+
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+sys-font.path = "../sys-font"

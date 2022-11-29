@@ -1,0 +1,17 @@
+[package]
+name = "emulator"
+description = "The CHIP8 emulator itself."
+
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+color-eyre.workspace = true
+crossbeam.workspace = true
+display.path = "../display"
+display-chip8.path = "../display-chip8"
+ram.path = "../ram"
+tracing.workspace = true
+ui-thread-waker.path = "../ui-thread-waker"

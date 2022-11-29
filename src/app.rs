@@ -6,7 +6,8 @@ use std::sync::{
 use crossbeam::channel::TryRecvError;
 use egui::{Key, KeyboardShortcut, Modifiers};
 
-use crate::{emulator::Emulator, renderer::Renderer};
+use emulator::Emulator;
+use renderer::Renderer;
 
 const SHORTCUT_SHOW_HIDE_UI: KeyboardShortcut = KeyboardShortcut::new(Modifiers::CTRL, Key::H);
 const SHORTCUT_FULLSCREEN: KeyboardShortcut = KeyboardShortcut::new(Modifiers::ALT, Key::Enter);
@@ -34,7 +35,7 @@ impl Default for App {
 
 impl App {
     /// Called once before the first frame to handle initializing the app.
-    pub fn new(cc: &eframe::CreationContext<'_>, emulator: &crate::emulator::Emulator) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, emulator: &Emulator) -> Self {
         // Get the WGPU render state from the eframe creation context.
         let wgpu_render_state = cc
             .wgpu_render_state

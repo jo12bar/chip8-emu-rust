@@ -1,11 +1,10 @@
 use std::sync::{Arc, Mutex};
 
-use eframe::wgpu;
-use eframe::wgpu::util::DeviceExt;
+use wgpu::util::DeviceExt;
 
-use crate::display::{
-    blank_display::BlankDisplay, DisplayRef, WgpuDisplayTexture, WgpuDisplayTextureUpdateError,
-};
+use display::DisplayRef;
+use display_blank::BlankDisplay;
+use wgpu_display_texture::{WgpuDisplayTexture, WgpuDisplayTextureUpdateError};
 
 /// A [`wgpu`] renderer for rendering the emulated screen and the GUI.
 #[derive(Debug)]

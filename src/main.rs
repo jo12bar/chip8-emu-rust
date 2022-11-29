@@ -1,7 +1,12 @@
 // hide the console window on Windows in release mode
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use rust_chip::App;
+mod app;
+mod egui_ui_thread_waker;
+
+use app::App;
+use egui_ui_thread_waker::EguiUiThreadWaker;
+use emulator::Emulator;
 
 /// For when compiling to a native target.
 ///
@@ -10,7 +15,7 @@ use rust_chip::App;
 fn main() -> color_eyre::Result<()> {
     setup_logging()?;
 
-    let mut emulator = rust_chip::emulator::Emulator::new();
+    let mut emulator = Emulator::new();
     let emulator_app_ref = emulator.clone();
     let emulator_bg_thread_ref = emulator.clone();
 
@@ -28,7 +33,9 @@ fn main() -> color_eyre::Result<()> {
             let emu_egui_context = cc.egui_ctx.clone();
 
             // Start the emulator in its background thread
-            emulator_bg_thread_ref.start(emu_egui_context).unwrap();
+            emulator_bg_thread_ref
+                .start(EguiUiThreadWaker::from(emu_egui_context))
+                .unwrap();
 
             Box::new(App::new(cc, &emulator_app_ref))
         }),

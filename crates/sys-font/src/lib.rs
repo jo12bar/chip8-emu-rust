@@ -1,3 +1,5 @@
+//! The system font used by this CHIP8 emulator.
+
 use strum::EnumCount;
 
 /// The system font, with sprite data representing the hexadecimal numbers from

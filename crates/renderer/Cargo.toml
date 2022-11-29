@@ -1,0 +1,15 @@
+[package]
+name = "renderer"
+description = "The emulator's renderer, for rendering the CHIP8-compatible display."
+
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+bytemuck.workspace = true
+display.path = "../display"
+display-blank.path = "../display-blank"
+wgpu.workspace = true
+wgpu-display-texture.path = "../wgpu-display-texture"

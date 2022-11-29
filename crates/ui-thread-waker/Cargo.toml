@@ -1,0 +1,8 @@
+[package]
+name = "ui-thread-waker"
+description = "A trait that allows the emulator to wake the UI thread from sleep when required."
+
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true

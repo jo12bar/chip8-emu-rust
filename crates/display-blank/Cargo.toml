@@ -1,0 +1,13 @@
+[package]
+name = "display-blank"
+description = "A blank CHIP8 display to use when no other display is connected to the renderer."
+
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+display.path = "../display"
+image.workspace = true
+tracing.workspace = true

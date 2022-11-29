@@ -1,13 +1,13 @@
-[package]
-name = "rust-chip"
+[workspace]
+members = ["crates/*"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
-
-description = "A highly experimental Rust-based CHIP8 emulator, with web and desktop support and hardware-accelerated rendering."
 license = "MIT"
 repository = "https://github.com/jo12bar/rust-chip"
 
-[dependencies]
+[workspace.dependencies]
 bytemuck = { version = "1.12.3", features = ["derive"] }
 color-eyre = "0.6.2"
 image = { version = "0.24.4", default-features = false }
@@ -17,21 +17,47 @@ thiserror = "1.0.37"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", features = ["env-filter", "time"] }
 crossbeam = { version = "0.8.2", features = ["crossbeam-channel"] }
+wgpu = "*"
 
-[dependencies.egui]
+[workspace.dependencies.egui]
 git = "https://github.com/emilk/egui"
 rev = "502e1aa22952aeae48dadff9fa916a94114276e8"
 
-[dependencies.eframe]
+[workspace.dependencies.eframe]
 git = "https://github.com/emilk/egui"
 rev = "502e1aa22952aeae48dadff9fa916a94114276e8"
 default_features = false
-features = [
-    "persistence",
-    "wgpu",
-    "dark-light",
-    "default_fonts"
-]
+features = ["persistence", "wgpu", "dark-light", "default_fonts"]
+
+################################################################################
+
+[package]
+name = "rust-chip"
+description = "A highly experimental Rust-based CHIP8 emulator, with web and desktop support and hardware-accelerated rendering."
+
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+#bytemuck.workspace = true
+color-eyre.workspace = true
+#image.workspace = true
+serde.workspace = true
+#strum.workspace = true
+#thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+crossbeam.workspace = true
+eframe.workspace = true
+egui.workspace = true
+
+emulator.path = "./crates/emulator"
+renderer.path = "./crates/renderer"
+ui-thread-waker.path = "./crates/ui-thread-waker"
+
+################################################################################
 
 # Enable *some* optimizations in debug mode
 [profile.dev]

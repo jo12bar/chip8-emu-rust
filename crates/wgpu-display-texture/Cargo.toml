@@ -1,0 +1,13 @@
+[package]
+name = "wgpu-display-texture"
+description = "A utility for managing GPU-side textures for rendering CHIP8-compatible displayering CHIP8-compatible displays."
+
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+display.path = "../display"
+thiserror.workspace = true
+wgpu.workspace = true

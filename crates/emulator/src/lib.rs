@@ -12,10 +12,10 @@ use std::sync::{
 use color_eyre::eyre::Context;
 use crossbeam::channel::{self, Receiver, Sender};
 
-use crate::{
-    display::{chip8_display::Chip8Display, Display, DisplayRef},
-    ram::Ram,
-};
+use display::{Display, DisplayRef};
+use display_chip8::Chip8Display;
+use ram::Ram;
+use ui_thread_waker::UiThreadWaker;
 
 /// The CHIP8 emulator.
 ///
@@ -60,11 +60,11 @@ impl Emulator {
 
     /// Start the emulator's main run loop in a background thread.
     ///
-    /// The [`egui::Context`] is used to wake the UI thread whenever repainting
+    /// The [`UiThreadWaker`] is used to wake the UI thread whenever repainting
     /// is required.
     ///
     /// Returns an error if the emulator is *already* running.
-    pub fn start(self, egui_context: egui::Context) -> color_eyre::Result<()> {
+    pub fn start(self, waker: impl UiThreadWaker + Send + 'static) -> color_eyre::Result<()> {
         if self.should_run.load(Ordering::SeqCst) {
             return Err(color_eyre::eyre::eyre!("The emulator is already running!"));
         }
@@ -72,7 +72,7 @@ impl Emulator {
         std::thread::Builder::new()
             .name("emulator".to_string())
             .spawn(move || {
-                self.main_run_loop(egui_context);
+                self.main_run_loop(waker);
             })
             .wrap_err("Failed to start emulator background thread")?;
 
@@ -80,12 +80,12 @@ impl Emulator {
     }
 
     /// The emulator's main run loop. This is run in a background thread by [`Self::start()`].
-    fn main_run_loop(self, egui_context: egui::Context) {
+    fn main_run_loop(self, waker: impl UiThreadWaker) {
         self.should_run.store(true, Ordering::SeqCst);
 
         tracing::info!("Starting main run loop");
 
-        self.attach_display(Box::new(Chip8Display::new()), &egui_context)
+        self.attach_display(Box::new(Chip8Display::new()), &waker)
             .unwrap();
 
         let mut x = 0;
@@ -102,7 +102,7 @@ impl Emulator {
             y = (y + 1) % 32;
 
             self.set_frame_ready_to_render();
-            egui_context.request_repaint();
+            waker.wake_ui_thread();
 
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
@@ -119,12 +119,12 @@ impl Emulator {
     fn attach_display(
         &self,
         display: Box<dyn Display>,
-        egui_context: &egui::Context,
+        waker: &impl UiThreadWaker,
     ) -> color_eyre::Result<()> {
         *self.display.lock().unwrap() = Some(display);
         self.display_ref_sender.send(Arc::clone(&self.display))?;
         self.set_frame_ready_to_render();
-        egui_context.request_repaint();
+        waker.wake_ui_thread();
         Ok(())
     }
 

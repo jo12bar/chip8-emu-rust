@@ -1,0 +1,11 @@
+[package]
+name = "sys-font"
+description = "The system font used by this CHIP8 emulator."
+
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+strum.workspace = true
